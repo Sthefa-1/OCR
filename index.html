@@ -2,42 +2,44 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>PDF/Imagen escaneada a Word</title>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+  <title>Imagen a Word Editable</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.7.0/docx.umd.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #eef7ff;
-      padding: 30px;
-      max-width: 800px;
+      font-family: sans-serif;
+      background: #f0f8ff;
+      max-width: 600px;
       margin: auto;
+      padding: 30px;
     }
 
     h1 {
       text-align: center;
-      color: #1565c0;
+      color: #0d47a1;
     }
 
     input[type="file"] {
-      margin: 20px 0;
+      display: block;
+      margin: 20px auto;
     }
 
-    #cargando {
+    #status {
+      text-align: center;
+      margin: 20px;
       font-weight: bold;
-      color: #1565c0;
-      margin: 15px 0;
     }
 
     button {
+      display: block;
+      margin: auto;
+      padding: 10px 20px;
+      font-size: 16px;
       background-color: #1976d2;
       color: white;
       border: none;
-      padding: 10px 20px;
       border-radius: 6px;
       cursor: pointer;
-      margin-top: 10px;
     }
 
     button:hover {
@@ -47,84 +49,55 @@
 </head>
 <body>
 
-  <h1>📄 OCR de Imágenes y PDFs escaneados a Word</h1>
+  <h1>🖼️ Imagen a Word Editable</h1>
 
-  <input type="file" id="archivo" accept=".jpg,.jpeg,.png,.pdf" onchange="procesarArchivo(event)">
-  <div id="cargando">Selecciona una imagen o PDF escaneado...</div>
-  <button id="descargarBtn" style="display:none;" onclick="descargarWord()">⬇️ Descargar Word</button>
+  <input type="file" accept="image/*" id="imagenInput">
+  <div id="status">Selecciona una imagen...</div>
+  <button id="descargarBtn" style="display: none;">⬇️ Descargar Word</button>
 
   <script>
-    let textoReconocido = "";
+    let textoExtraido = "";
 
-    async function procesarArchivo(event) {
-      const archivo = event.target.files[0];
-      const cargando = document.getElementById("cargando");
-      const descargarBtn = document.getElementById("descargarBtn");
-      textoReconocido = "";
-      descargarBtn.style.display = "none";
+    document.getElementById("imagenInput").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
 
-      if (!archivo) return;
+      document.getElementById("status").textContent = "⏳ Extrayendo texto de la imagen...";
 
-      const tipo = archivo.type;
+      try {
+        const result = await Tesseract.recognize(file, 'spa+eng');
+        textoExtraido = result.data.text.trim();
 
-      if (tipo === "application/pdf") {
-        cargando.textContent = "📑 Procesando PDF escaneado...";
-        await procesarPDF(archivo);
-      } else if (tipo.startsWith("image/")) {
-        cargando.textContent = "🖼️ Procesando imagen...";
-        await procesarImagen(archivo);
-      } else {
-        cargando.textContent = "❌ Tipo de archivo no compatible.";
-        return;
+        if (textoExtraido) {
+          document.getElementById("status").textContent = "✅ Texto extraído. ¡Listo para descargar!";
+          document.getElementById("descargarBtn").style.display = "block";
+        } else {
+          document.getElementById("status").textContent = "❌ No se detectó texto en la imagen.";
+        }
+      } catch (error) {
+        console.error(error);
+        document.getElementById("status").textContent = "❌ Error al procesar la imagen.";
       }
+    });
 
-      cargando.textContent = "✅ Texto extraído correctamente.";
-      descargarBtn.style.display = "inline-block";
-    }
-
-    async function procesarImagen(archivo) {
-      const result = await Tesseract.recognize(archivo, 'spa+eng');
-      textoReconocido = result.data.text.trim();
-    }
-
-    async function procesarPDF(archivo) {
-      const pdf = await pdfjsLib.getDocument(URL.createObjectURL(archivo)).promise;
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({ canvasContext: context, viewport }).promise;
-
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-        const result = await Tesseract.recognize(blob, 'spa+eng');
-        textoReconocido += result.data.text.trim() + "\n\n";
-      }
-    }
-
-    function descargarWord() {
+    document.getElementById("descargarBtn").addEventListener("click", () => {
       const doc = new window.docx.Document({
         sections: [{
-          children: [
-            new window.docx.Paragraph({
-              text: textoReconocido,
-              spacing: { after: 200 },
-            })
-          ]
+          children: textoExtraido.split('\n').map(line =>
+            new window.docx.Paragraph({ text: line })
+          )
         }]
       });
 
       window.docx.Packer.toBlob(doc).then(blob => {
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "texto_extraido.docx";
-        a.click();
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "documento_editable.docx";
+        link.click();
+        URL.revokeObjectURL(url);
       });
-    }
+    });
   </script>
 
 </body>
